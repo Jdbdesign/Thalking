@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Misc
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+*.log
+
+# Temp / scratch files used during development (root-level only)
+/_*.mjs
+/_*.html
+/_shot*.png
+/package.json
+/package-lock.json

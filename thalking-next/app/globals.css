@@ -1,0 +1,44 @@
+/*
+ * Minimal base only. The page's real global styles (body background, font
+ * stack, keyframes, ::selection, media queries) ship inside the template's
+ * <sc-helmet> block and are injected into <head> by the dc-runtime helmet
+ * manager at boot — exactly as in the original artifact.
+ */
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/*
+ * "Be Local. From Anywhere." text column — large screens only (>=1600px).
+ * Scale up the copy and spacing so the text block grows taller and sits
+ * closer to the image's bottom edge (intentionally not fully aligned).
+ * Desktop/laptop and mobile are untouched.
+ */
+@media (min-width: 1600px) {
+  .th-local-copy > h2 {
+    font-size: 52px !important;
+  }
+  .th-local-copy > p:first-of-type {
+    font-size: 20px !important;
+    line-height: 1.75 !important;
+    margin-top: 22px !important;
+    max-width: 640px !important;
+  }
+  .th-local-copy > div {
+    gap: 24px !important;
+    margin-top: 34px !important;
+  }
+  .th-local-copy > div > span {
+    font-size: 18px !important;
+  }
+  .th-local-copy > div > span > svg {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  .th-local-copy > p:last-of-type {
+    font-size: 24px !important;
+    margin-top: 38px !important;
+  }
+}
