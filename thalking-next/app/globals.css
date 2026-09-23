@@ -42,3 +42,132 @@ body {
     margin-top: 38px !important;
   }
 }
+
+/*
+ * International-calling globe markers: small green phone pins that pulse with a
+ * glowing ring (a live "call") and fade in/out as the JS driver repositions
+ * them across the globe. Purely decorative; sits over the globe image.
+ */
+#th-globe-markers .th-gm {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px; /* center on the left/top coordinate */
+  border-radius: 50%;
+  background: #16a34a;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px -2px rgba(22, 163, 74, 0.7);
+  opacity: 0;
+  transform: scale(0.6);
+  /* Only opacity/scale animate — position changes are instant and happen while
+     the marker is fully faded out, so it never appears to slide across. */
+  transition: opacity 0.6s ease, transform 0.6s ease;
+  z-index: 2;
+}
+#th-globe-markers .th-gm.is-on {
+  opacity: 1;
+  transform: scale(1);
+}
+/* glowing expanding ring = active call */
+#th-globe-markers .th-gm::before,
+#th-globe-markers .th-gm::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid rgba(22, 163, 74, 0.55);
+  opacity: 0;
+}
+#th-globe-markers .th-gm.is-on::before {
+  animation: thCallRing 1.8s ease-out infinite;
+}
+#th-globe-markers .th-gm.is-on::after {
+  animation: thCallRing 1.8s ease-out 0.9s infinite;
+}
+@keyframes thCallRing {
+  0% { transform: scale(0.7); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #th-globe-markers .th-gm.is-on::before,
+  #th-globe-markers .th-gm.is-on::after { animation: none; }
+}
+
+/*
+ * International-calling "Call any country" card width.
+ * On desktop/laptop (<=1599px) the card sits over the globe and hides it, so
+ * narrow the card and nudge it left to let the globe show on the right.
+ * Large screens (>=1600px) keep the original 520px and are untouched.
+ */
+@media (min-width: 1020px) and (max-width: 1599px) {
+  .th-rates-card {
+    max-width: 400px !important;
+    /* nudge the card left so more of the globe shows on the right */
+    margin-right: 90px !important;
+  }
+}
+
+/*
+ * "Whole Phone System" feature tiles — hover effect.
+ * On hover: the card lifts with a soft violet glow, a diagonal light sheen
+ * sweeps across once, and the icon badge fills with the brand gradient while
+ * the icon gently pops. All GPU-friendly transforms/opacity — smooth, no jank.
+ */
+.th-sys-tile .th-sys-sheen {
+  position: absolute;
+  top: 0;
+  left: -140%;
+  width: 80%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.65) 50%,
+    transparent 100%
+  );
+  transform: skewX(-18deg);
+  transition: left 0.7s ease;
+}
+.th-sys-tile > span:last-child {
+  position: relative;
+  z-index: 1;
+}
+/* !important so these win over the tiles' inline styles from the template. */
+.th-sys-tile:hover {
+  transform: translateY(-6px) !important;
+  background: #ffffff !important;
+  border-color: #d8ccff !important;
+  box-shadow: 0 22px 40px -22px rgba(124, 58, 237, 0.55),
+    0 0 0 1px rgba(124, 58, 237, 0.12) !important;
+}
+.th-sys-tile:hover .th-sys-sheen {
+  left: 160%;
+}
+.th-sys-tile:hover .th-sys-ico {
+  background: linear-gradient(145deg, #8b5cf6, #6d28d9) !important;
+  transform: translateY(-2px) scale(1.08) rotate(-4deg) !important;
+  box-shadow: 0 12px 22px -8px rgba(124, 58, 237, 0.85) !important;
+}
+/* icon stroke turns white when the badge fills */
+.th-sys-tile .th-sys-ico svg {
+  transition: stroke 0.3s ease;
+}
+.th-sys-tile:hover .th-sys-ico svg {
+  stroke: #ffffff !important;
+}
+.th-sys-tile:hover .th-sys-ico svg circle {
+  stroke: #ffffff !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .th-sys-tile,
+  .th-sys-tile .th-sys-sheen,
+  .th-sys-tile .th-sys-ico {
+    transition: none;
+  }
+  .th-sys-tile:hover {
+    transform: none;
+  }
+}
