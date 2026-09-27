@@ -91,6 +91,190 @@ function startHeroNumberRotation(): () => void {
 }
 
 /**
+ * Currency converter for the top-nav selector (#th-currency). Converts the
+ * pricing figures (.th-price) into the visitor's currency.
+ *  - Live rates from the free, key-less open.er-api.com endpoint (base USD),
+ *    with a baked-in fallback table so it still works offline / if the API is
+ *    down.
+ *  - Default currency guessed from the browser locale/region (no geo-IP call).
+ *  - Self-contained: only touches #th-currency and .th-price nodes; guarded
+ *    against duplicate init across HMR / re-mounts. Returns a cleanup fn.
+ */
+function startCurrencyConverter(): () => void {
+  const W = window as unknown as { __thCurrency?: boolean };
+  if (W.__thCurrency) return () => {};
+  W.__thCurrency = true;
+
+  // Region rows: id (used as region badge, 'GL' for Global), name, currency.
+  type Region = { id: string; name: string; ccy: string };
+  const REGIONS: Region[] = [
+    { id: 'GL', name: 'Global', ccy: 'GBP' },
+    { id: 'GB', name: 'United Kingdom', ccy: 'GBP' },
+    { id: 'US', name: 'United States', ccy: 'USD' },
+    { id: 'EU', name: 'European Union', ccy: 'EUR' },
+    { id: 'CA', name: 'Canada', ccy: 'CAD' },
+    { id: 'AU', name: 'Australia', ccy: 'AUD' },
+    { id: 'IN', name: 'India', ccy: 'INR' },
+    { id: 'NG', name: 'Nigeria', ccy: 'NGN' },
+    { id: 'ZA', name: 'South Africa', ccy: 'ZAR' },
+    { id: 'GH', name: 'Ghana', ccy: 'GHS' },
+    { id: 'AE', name: 'United Arab Emirates', ccy: 'AED' },
+    { id: 'JP', name: 'Japan', ccy: 'JPY' },
+    { id: 'KE', name: 'Kenya', ccy: 'KES' },
+  ];
+  const SYMBOL: Record<string, string> = {
+    USD: '$', GBP: '£', EUR: '€', NGN: '₦', CAD: 'C$', AUD: 'A$',
+    INR: '₹', ZAR: 'R', GHS: '₵', AED: 'AED ', JPY: '¥', KES: 'KSh ',
+  };
+  // Rates relative to USD (fallback if the live fetch fails). Approximate.
+  let ratesUSD: Record<string, number> = {
+    USD: 1, GBP: 0.79, EUR: 0.92, NGN: 1550, CAD: 1.36, AUD: 1.52,
+    INR: 83, ZAR: 18.5, GHS: 15, AED: 3.67, JPY: 156, KES: 129,
+  };
+
+  const guessRegionId = (): string => {
+    try {
+      const loc = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+      const region = loc.split('-')[1]?.toUpperCase();
+      if (region && REGIONS.some((r) => r.id === region)) return region;
+    } catch {}
+    return 'GL';
+  };
+
+  const fmt = (n: number, code: string): string => {
+    const noDec = code === 'JPY' || code === 'NGN' || code === 'KES';
+    const num = noDec ? Math.round(n) : Math.round(n * 100) / 100;
+    const s = noDec
+      ? num.toLocaleString('en-US')
+      : num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    return (SYMBOL[code] || '') + s;
+  };
+  const convert = (amount: number, base: string, target: string): number =>
+    (amount / (ratesUSD[base] ?? 1)) * (ratesUSD[target] ?? 1);
+
+  let trigger: HTMLElement | null = null;
+  let panel: HTMLElement | null = null;
+  let list: HTMLElement | null = null;
+  let label: HTMLElement | null = null;
+  let currentId = 'GL';
+  let open = false;
+  let pollTimer: number | undefined;
+  let stopped = false;
+
+  const applyPrices = (ccy: string) => {
+    document.querySelectorAll<HTMLElement>('.th-price').forEach((el) => {
+      const amount = parseFloat(el.dataset.thAmount || '0');
+      const base = el.dataset.thBase || 'USD';
+      const prefix = el.dataset.thPrefix || '';
+      el.textContent = prefix + fmt(convert(amount, base, ccy), ccy);
+    });
+  };
+
+  const renderList = () => {
+    if (!list) return;
+    list.innerHTML = '';
+    for (const r of REGIONS) {
+      const active = r.id === currentId;
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.setAttribute('role', 'option');
+      row.dataset.id = r.id;
+      row.style.cssText =
+        'width:100%;display:flex;align-items:center;gap:11px;padding:9px 10px;border:none;border-radius:10px;cursor:pointer;text-align:left;font-family:inherit;transition:background .14s;background:' +
+        (active ? '#F2F1FF' : 'transparent');
+      const badge = r.id === 'GL'
+        ? '<span style="width:26px;height:26px;border-radius:50%;background:#EDE9FE;display:grid;place-items:center;flex-shrink:0"><svg width="15" height="15" viewBox="0 0 24 24" stroke="#7C3AED" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"></path></svg></span>'
+        : '<span style="width:26px;height:26px;border-radius:7px;background:#F2F3F8;display:grid;place-items:center;flex-shrink:0;font-family:\'Plus Jakarta Sans\',sans-serif;font-size:9.5px;font-weight:800;color:#6B7189;letter-spacing:.02em">' + r.id + '</span>';
+      row.innerHTML =
+        badge +
+        '<span style="flex:1;min-width:0;font-family:\'Plus Jakarta Sans\',sans-serif;font-size:13.5px;font-weight:' + (active ? '700' : '600') + ';color:' + (active ? '#4B2AA8' : '#0B1020') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + r.name + '</span>' +
+        '<span style="font-family:\'Plus Jakarta Sans\',sans-serif;font-size:12.5px;font-weight:700;color:' + (active ? '#7C3AED' : '#A2A8BC') + ';flex-shrink:0">' + r.ccy + '</span>';
+      row.addEventListener('mouseenter', () => { if (r.id !== currentId) row.style.background = '#F6F7FB'; });
+      row.addEventListener('mouseleave', () => { if (r.id !== currentId) row.style.background = 'transparent'; });
+      row.addEventListener('click', () => { select(r.id); closePanel(); });
+      list.appendChild(row);
+    }
+  };
+
+  const select = (id: string) => {
+    const r = REGIONS.find((x) => x.id === id) || REGIONS[0];
+    currentId = r.id;
+    if (label) label.textContent = r.ccy;
+    applyPrices(r.ccy);
+    renderList();
+    try { localStorage.setItem('th-region', r.id); } catch {}
+  };
+
+  const openPanel = () => {
+    if (!panel || !trigger) return;
+    panel.style.display = 'flex';
+    trigger.setAttribute('aria-expanded', 'true');
+    open = true;
+    // keep the active row in view
+    const act = list?.querySelector<HTMLElement>('[data-id="' + currentId + '"]');
+    if (act) act.scrollIntoView({ block: 'nearest' });
+  };
+  const closePanel = () => {
+    if (!panel || !trigger) return;
+    panel.style.display = 'none';
+    trigger.setAttribute('aria-expanded', 'false');
+    open = false;
+  };
+
+  const onDocClick = (e: MouseEvent) => {
+    const wrap = document.getElementById('th-currency-wrap');
+    if (open && wrap && !wrap.contains(e.target as Node)) closePanel();
+  };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && open) closePanel(); };
+
+  const init = () => {
+    trigger = document.getElementById('th-currency-trigger');
+    panel = document.getElementById('th-currency-panel');
+    list = document.getElementById('th-currency-list');
+    label = document.getElementById('th-currency-label');
+    if (!trigger || !panel || !list || !label) return false;
+
+    let saved = '';
+    try { saved = localStorage.getItem('th-region') || ''; } catch {}
+    currentId = saved && REGIONS.some((r) => r.id === saved) ? saved : guessRegionId();
+
+    renderList();
+    select(currentId);
+
+    trigger.addEventListener('click', (e) => { e.stopPropagation(); open ? closePanel() : openPanel(); });
+    document.addEventListener('click', onDocClick);
+    document.addEventListener('keydown', onKey);
+
+    fetch('https://open.er-api.com/v6/latest/USD')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (stopped || !j || j.result !== 'success' || !j.rates) return;
+        for (const code of Object.keys(ratesUSD)) {
+          if (typeof j.rates[code] === 'number') ratesUSD[code] = j.rates[code];
+        }
+        const r = REGIONS.find((x) => x.id === currentId) || REGIONS[0];
+        applyPrices(r.ccy);
+      })
+      .catch(() => {});
+    return true;
+  };
+
+  let tries = 0;
+  pollTimer = window.setInterval(() => {
+    tries++;
+    if (init() || tries > 60) { window.clearInterval(pollTimer); pollTimer = undefined; }
+  }, 250);
+
+  return () => {
+    stopped = true;
+    if (pollTimer) window.clearInterval(pollTimer);
+    document.removeEventListener('click', onDocClick);
+    document.removeEventListener('keydown', onKey);
+    W.__thCurrency = false;
+  };
+}
+
+/**
  * Animates the 5 green call markers on the International-calling globe: they
  * fade out together, hop to a fresh set of positions across the globe, and
  * fade back in — a continuous loop suggesting live calls worldwide. Purely
@@ -254,6 +438,7 @@ export default function ThalkingApp() {
     let cancelled = false;
     let stopRotation: (() => void) | undefined;
     let stopGlobe: (() => void) | undefined;
+    let stopCurrency: (() => void) | undefined;
     (async () => {
       // React + ReactDOM must exist on window before dc-runtime boots.
       await loadScript('/dc/react.production.min.js');
@@ -266,6 +451,7 @@ export default function ThalkingApp() {
       // Start the lively hero number rotation + globe call markers once mounting.
       if (!cancelled) stopRotation = startHeroNumberRotation();
       if (!cancelled) stopGlobe = startGlobeMarkers();
+      if (!cancelled) stopCurrency = startCurrencyConverter();
     })().catch((err) => {
       // eslint-disable-next-line no-console
       console.error('[thalking] boot failed:', err);
@@ -275,6 +461,7 @@ export default function ThalkingApp() {
       cancelled = true;
       if (stopRotation) stopRotation();
       if (stopGlobe) stopGlobe();
+      if (stopCurrency) stopCurrency();
     };
   }, []);
 
